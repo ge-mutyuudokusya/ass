@@ -1,29 +1,64 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Daily Feed ログイン</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 420px; margin: 40px auto; }
-    label { display:block; margin: 12px 0 4px; }
-    input { width:100%; padding:10px; box-sizing:border-box; }
-    button { margin-top:12px; padding:10px 14px; }
-    .muted { color:#666; font-size:12px; margin-top:8px; }
-  </style>
+  <meta charset="UTF-8">
+  <title>ログイン | Daily Feed</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-indigo-200 via-purple-200 to-pink-200 min-h-screen flex items-center justify-center">
+
+  <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center">
+    <h1 class="text-2xl font-bold mb-6 text-gray-800">Daily Feed ログイン</h1>
+
+    <!-- メールアドレス入力 -->
+    <input id="email" type="email" placeholder="メールアドレス"
+      class="w-full mb-3 px-4 py-2 border rounded-lg focus:outline-none focus:ring focus:ring-indigo-300">
+
+    <!-- パスワード入力 -->
+    <input id="password" type="password" placeholder="パスワード"
+      class="w-full mb-3 px-4 py-2 border rounded-lg focus:outline-none focus:ring focus:ring-indigo-300">
+
+    <!-- ログインボタン -->
+    <button onclick="handleLogin(this)" 
+      class="w-full bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg mb-3 transition">
+      ログイン
+    </button>
+
+    <!-- 新規登録ボタン -->
+    <button onclick="handleRegister(this)" 
+      class="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg mb-3 transition">
+      新規登録
+    </button>
+
+    <!-- パスワードリセット -->
+    <button onclick="handleReset(this)" 
+      class="w-full bg-yellow-500 hover:bg-yellow-600 text-white py-2 rounded-lg mb-6 transition">
+      パスワードリセット
+    </button>
+
+    <hr class="my-4">
+
+    <!-- Googleログイン -->
+    <button onclick="handleGoogleLogin(this)" 
+      class="w-full flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg transition">
+      <img src="https://www.svgrepo.com/show/355037/google.svg" alt="Google" class="w-5 h-5">
+      Googleでログイン
+    </button>
+  </div>
+
+  <!-- Firebase ロジック -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
     import {
-getAuth, setPersistence, browserLocalPersistence,
-    onAuthStateChanged, createUserWithEmailAndPassword,
-    signInWithEmailAndPassword, sendPasswordResetEmail,
-    GoogleAuthProvider, signInWithPopup
+      getAuth, setPersistence, browserLocalPersistence,
+      onAuthStateChanged, createUserWithEmailAndPassword,
+      signInWithEmailAndPassword, sendPasswordResetEmail,
+      GoogleAuthProvider, signInWithPopup
     } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-    // ★ Firebase構成（コンソールの値をそのまま貼り付けOK）
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
+    const firebaseConfig = {
+ apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
   authDomain: "daily-feed-414b6.firebaseapp.com",
   databaseURL: "https://daily-feed-414b6-default-rtdb.firebaseio.com",
   projectId: "daily-feed-414b6",
@@ -31,80 +66,77 @@ const firebaseConfig = {
   messagingSenderId: "360432327059",
   appId: "1:360432327059:web:0cb52176305190294d3066",
   measurementId: "G-0R08TWS1WP"
-};
+    };
 
-    // 初期化
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
-    await setPersistence(auth, browserLocalPersistence); // ログイン状態を保持
+    const db = getFirestore(app);
+    await setPersistence(auth, browserLocalPersistence);
 
-    // すでにログインしていたらホームへ
-    onAuthStateChanged(auth, (user) => {
-      if (user) location.href = "home.html";
-    });
+    // すでにログイン済みならホームへ
+    onAuthStateChanged(auth, (user) => { if (user) location.href = "home.html"; });
 
-    // UIハンドラ
-    const emailEl = () => document.getElementById("email");
-    const passEl  = () => document.getElementById("password");
-    const disableWhile = async (btn, fn) => {
-      btn.disabled = true; btn.textContent = "処理中…";
-      try { await fn(); } finally { btn.disabled = false; btn.textContent = btn.dataset.label; }
+    // 新規登録
+    window.handleRegister = async (btn) => {
+      const email = document.getElementById("email").value;
+      const pass = document.getElementById("password").value;
+      btn.disabled = true; btn.textContent = "登録中...";
+      try {
+        const userCred = await createUserWithEmailAndPassword(auth, email, pass);
+        await setDoc(doc(db, "users", userCred.user.uid), {
+          uid: userCred.user.uid,
+          name: email.split("@")[0],
+          email: email,
+          photoURL: "",
+          createdAt: new Date(),
+        });
+        location.href = "home.html";
+      } catch (err) { alert("登録失敗: " + err.message); }
+      btn.disabled = false; btn.textContent = "新規登録";
     };
 
-    window.handleRegister = (btn) => disableWhile(btn, async () => {
-      await createUserWithEmailAndPassword(auth, emailEl().value, passEl().value);
-      alert("登録成功！ログインしました。"); location.href = "home.html";
-    });
-
-    window.handleLogin = (btn) => disableWhile(btn, async () => {
-      await signInWithEmailAndPassword(auth, emailEl().value, passEl().value);
-      location.href = "home.html";
-    });
-
-    window.handleReset = async () => {
-      const email = emailEl().value.trim();
-      if (!email) return alert("メールアドレスを入力してください。");
-      await sendPasswordResetEmail(auth, email);
-      alert("パスワード再設定メールを送信しました。");
+    // ログイン
+    window.handleLogin = async (btn) => {
+      const email = document.getElementById("email").value;
+      const pass = document.getElementById("password").value;
+      btn.disabled = true; btn.textContent = "ログイン中...";
+      try {
+        await signInWithEmailAndPassword(auth, email, pass);
+        location.href = "home.html";
+      } catch (err) { alert("ログイン失敗: " + err.message); }
+      btn.disabled = false; btn.textContent = "ログイン";
     };
- 
-  // すでにログインしていたらホームへ
-  onAuthStateChanged(auth, (user) => {
-    if (user) location.href = "home.html";
-  });
 
-  // Googleログイン処理
-  window.handleGoogleLogin = async (btn) => {
-    btn.disabled = true; btn.textContent = "Googleでログイン中…";
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      location.href = "home.html";
-    } catch (err) {
-      alert("Googleログイン失敗: " + err.message);
-    } finally {
+    // パスワードリセット
+    window.handleReset = async (btn) => {
+      const email = document.getElementById("email").value;
+      if (!email) return alert("メールアドレスを入力してください");
+      btn.disabled = true; btn.textContent = "送信中...";
+      try {
+        await sendPasswordResetEmail(auth, email);
+        alert("リセットメールを送信しました");
+      } catch (err) { alert("送信失敗: " + err.message); }
+      btn.disabled = false; btn.textContent = "パスワードリセット";
+    };
+
+    // Googleログイン
+    window.handleGoogleLogin = async (btn) => {
+      btn.disabled = true; btn.textContent = "Googleでログイン中...";
+      try {
+        const provider = new GoogleAuthProvider();
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+        await setDoc(doc(db, "users", user.uid), {
+          uid: user.uid,
+          name: user.displayName ?? "名無し",
+          email: user.email,
+          photoURL: user.photoURL ?? "",
+          lastLogin: new Date()
+        }, { merge: true });
+        location.href = "home.html";
+      } catch (err) { alert("Googleログイン失敗: " + err.message); }
       btn.disabled = false; btn.textContent = "Googleでログイン";
-    }
-  };
-
-  // （既存の handleRegister / handleLogin / handleReset はそのまま）
-</script>
-
-</head>
-<body>
-  <h1>Daily Feed ログイン</h1>
-  <label>メールアドレス</label>
-  <input type="email" id="email" autocomplete="email" required />
-  <label>パスワード</label>
-  <input type="password" id="password" autocomplete="current-password" required />
-  <div>
-    <button data-label="新規登録" onclick="handleRegister(this)">新規登録</button>
-    <button data-label="ログイン" onclick="handleLogin(this)">ログイン</button>
-    <hr>
-<button onclick="handleGoogleLogin(this)">Googleでログイン</button>
-
-  </div>
-  <p class="muted"><a href="javascript:void 0" onclick="handleReset()">パスワードをお忘れですか？</a></p>
-  <p class="muted">※ このログインはFirebase Authenticationを使用。APIキーは公開で問題ありません。</p>
+    };
+  </script>
 </body>
 </html>
