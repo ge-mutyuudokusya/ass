@@ -1,23 +1,39 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Daily Feed ホーム</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; }
-    header { display:flex; justify-content: space-between; align-items:center; }
-    button { padding:8px 12px; }
-    pre { background:#f6f6f6; padding:12px; border-radius:8px; }
-  </style>
+  <meta charset="UTF-8">
+  <title>マイページ | Daily Feed</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-pink-100 via-purple-100 to-indigo-100 min-h-screen flex items-center justify-center">
+
+  <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center">
+    <h1 class="text-2xl font-bold mb-6 text-gray-800">マイページ</h1>
+
+    <!-- プロフィール -->
+    <div class="flex flex-col items-center mb-6">
+      <img id="user-photo" src="" alt="プロフィール画像"
+        class="w-24 h-24 rounded-full shadow mb-3 border">
+      <p id="user-name" class="text-xl font-semibold text-gray-700">...</p>
+      <p id="user-email" class="text-gray-500">...</p>
+    </div>
+
+    <!-- メニュー -->
+    <div class="space-y-3">
+      <a href="./gacha.html" class="block bg-indigo-500 hover:bg-indigo-600 text-white py-2 rounded-lg transition">ガチャへ</a>
+      <a href="./my-characters.html" class="block bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg transition">マイキャラ一覧</a>
+      <button onclick="doLogout()" class="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg transition">ログアウト</button>
+    </div>
+  </div>
+
+  <!-- Firebase ロジック -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
     import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-    // ★ login.html と同じ構成を貼る（または外部JSに共通化）
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
+    const firebaseConfig = {
+ apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
   authDomain: "daily-feed-414b6.firebaseapp.com",
   databaseURL: "https://daily-feed-414b6-default-rtdb.firebaseio.com",
   projectId: "daily-feed-414b6",
@@ -25,33 +41,34 @@ const firebaseConfig = {
   messagingSenderId: "360432327059",
   appId: "1:360432327059:web:0cb52176305190294d3066",
   measurementId: "G-0R08TWS1WP"
-};
+    };
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
+    const db = getFirestore(app);
 
-    onAuthStateChanged(auth, (user) => {
-      if (!user) return location.href = "login.html"; // ガード
-      document.getElementById("user").textContent = user.email ?? user.uid;
+    // 認証チェック
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) return location.href = "login.html";
+
+      const snap = await getDoc(doc(db, "users", user.uid));
+      if (snap.exists()) {
+        const data = snap.data();
+        document.getElementById("user-name").textContent = data.name;
+        document.getElementById("user-email").textContent = data.email;
+        if (data.photoURL) {
+          document.getElementById("user-photo").src = data.photoURL;
+        } else {
+          document.getElementById("user-photo").src = "https://via.placeholder.com/100";
+        }
+      }
     });
 
+    // ログアウト
     window.doLogout = async () => {
       await signOut(auth);
       location.href = "login.html";
     };
   </script>
-</head>
-<body>
-  <header>
-    <h1>Daily Feed ホーム</h1>
-    <button onclick="doLogout()">ログアウト</button>
-  </header>
-  <p>ログイン中：<strong id="user">…</strong></p>
-
-  <!-- ここからガチャやマイページへリンク -->
-  <ul>
-    <li><a href="./gacha.html">ガチャへ</a></li>
-    <li><a href="./my-characters.html">マイキャラ一覧</a></li>
-  </ul>
 </body>
 </html>
