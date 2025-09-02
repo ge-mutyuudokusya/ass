@@ -14,9 +14,10 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
     import {
-      getAuth, setPersistence, browserLocalPersistence,
-      onAuthStateChanged, createUserWithEmailAndPassword,
-      signInWithEmailAndPassword, sendPasswordResetEmail
+getAuth, setPersistence, browserLocalPersistence,
+    onAuthStateChanged, createUserWithEmailAndPassword,
+    signInWithEmailAndPassword, sendPasswordResetEmail,
+    GoogleAuthProvider, signInWithPopup
     } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
 
     // ★ Firebase構成（コンソールの値をそのまま貼り付けOK）
@@ -66,7 +67,29 @@ const firebaseConfig = {
       await sendPasswordResetEmail(auth, email);
       alert("パスワード再設定メールを送信しました。");
     };
-  </script>
+ 
+  // すでにログインしていたらホームへ
+  onAuthStateChanged(auth, (user) => {
+    if (user) location.href = "home.html";
+  });
+
+  // Googleログイン処理
+  window.handleGoogleLogin = async (btn) => {
+    btn.disabled = true; btn.textContent = "Googleでログイン中…";
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      location.href = "home.html";
+    } catch (err) {
+      alert("Googleログイン失敗: " + err.message);
+    } finally {
+      btn.disabled = false; btn.textContent = "Googleでログイン";
+    }
+  };
+
+  // （既存の handleRegister / handleLogin / handleReset はそのまま）
+</script>
+
 </head>
 <body>
   <h1>Daily Feed ログイン</h1>
@@ -77,6 +100,9 @@ const firebaseConfig = {
   <div>
     <button data-label="新規登録" onclick="handleRegister(this)">新規登録</button>
     <button data-label="ログイン" onclick="handleLogin(this)">ログイン</button>
+    <hr>
+<button onclick="handleGoogleLogin(this)">Googleでログイン</button>
+
   </div>
   <p class="muted"><a href="javascript:void 0" onclick="handleReset()">パスワードをお忘れですか？</a></p>
   <p class="muted">※ このログインはFirebase Authenticationを使用。APIキーは公開で問題ありません。</p>
