@@ -1,39 +1,59 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>ガチャ | Daily Feed</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>制限付きガチャ</title>
+  <style>
+    body { background: #eef6fb; font-family: 'Arial', sans-serif; text-align: center; padding: 20px; }
+    h1 { font-size: 1.8em; color: #333; }
+    .gacha-machine, .zukan { background: #fff; border: 3px solid #ccc; border-radius: 16px; padding: 16px; max-width: 500px; margin: 20px auto; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+    .gacha-button { background-color: #ff4d4d; color: white; font-size: 1.1em; padding: 12px 24px; border: none; border-radius: 10px; cursor: pointer; }
+    .gacha-button:hover { background-color: #e60000; }
+    .result { margin-top: 20px; min-height: 200px; }
+    .item-image { width: 100%; max-width: 180px; height: auto; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.2); }
+    .item-name { font-size: 1.2em; margin-top: 10px; }
+    .rarity { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.9em; color: white; margin-top: 6px; }
+    .common { background-color: gray; }
+    .rare { background-color: dodgerblue; }
+    .super-rare { background-color: gold; color: black; }
+    .ultra-rare { background-color: purple; }
+    .zukan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 10px; margin-top: 15px; }
+    .zukan-item img { width: 100%; height: auto; object-fit: contain; border-radius: 10px; background-color: #f8f8f8; }
+    .zukan-item { font-size: 0.8em; }
+    .unknown { filter: grayscale(1) blur(2px); }
+    .fade-in { animation: fadeInScale 0.5s ease-out; }
+    @keyframes fadeInScale { 0% { opacity: 0; transform: scale(0.6); } 100% { opacity: 1; transform: scale(1); } }
+    .limit-warning { color: red; font-weight: bold; margin-top: 10px; }
+    .special-effect { font-size: 2em; animation: flash 1s infinite alternate; color: gold; }
+    @keyframes flash { from { opacity: 0.3; } to { opacity: 1; } }
+  </style>
 </head>
-<body class="bg-gradient-to-br from-yellow-100 via-pink-100 to-purple-100 min-h-screen flex items-center justify-center">
-
-  <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center">
-    <h1 class="text-2xl font-bold mb-6 text-gray-800">ガチャ</h1>
-
-    <!-- ガチャ結果 -->
-    <div id="result-box" class="hidden mb-6">
-      <img id="char-img" src="" alt="キャラ画像" class="w-32 h-32 mx-auto mb-3 rounded-full shadow">
-      <p id="char-name" class="text-xl font-semibold text-gray-700"></p>
-    </div>
-
-    <!-- ボタン -->
-    <button onclick="doGacha(this)" 
-      class="w-full bg-pink-500 hover:bg-pink-600 text-white py-3 rounded-lg transition mb-4">
-      ガチャを引く
-    </button>
-    <a href="./home.html" 
-      class="block w-full bg-gray-400 hover:bg-gray-500 text-white py-2 rounded-lg transition">
-      マイページへ戻る
-    </a>
+<body>
+  <h1> ガチャガチャ1日5回</h1>
+  <div class="gacha-machine">
+    <button class="gacha-button" onclick="rollGacha()">ガチャを回す！</button>
+    <div class="result" id="result"></div>
+    <div id="limitMessage" class="limit-warning"></div>
   </div>
+
+  <div class="zukan">
+    <h2>図鑑</h2>
+    <div class="zukan-grid" id="zukan"></div>
+  </div>
+
+  <audio id="gachaSound" preload="auto">
+    <source src="https://assets.mixkit.co/sfx/download/mixkit-arcade-retro-game-over-213.wav" type="audio/mpeg">
+  </audio>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, getDocs, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
+    // 🔑 Firebase設定
     const firebaseConfig = {
-  apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
+ apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
   authDomain: "daily-feed-414b6.firebaseapp.com",
   databaseURL: "https://daily-feed-414b6-default-rtdb.firebaseio.com",
   projectId: "daily-feed-414b6",
@@ -48,48 +68,116 @@
     const db = getFirestore(app);
 
     let currentUser = null;
+    let todayPulls = 0;
+    const maxPullsPerDay = 5;
+    const today = new Date().toLocaleDateString();
 
-    // ログインしてなければリダイレクト
-    onAuthStateChanged(auth, (user) => {
-      if (!user) location.href = "login.html";
-      else currentUser = user;
-    });
-
-    // ガチャ候補キャラ
-    const characters = [
-      { name: "勇者アレックス", img: "https://via.placeholder.com/150/FF0000/FFFFFF?text=Alex" },
-      { name: "魔法使いミラ", img: "https://via.placeholder.com/150/800080/FFFFFF?text=Mira" },
-      { name: "剣士カイル", img: "https://via.placeholder.com/150/0000FF/FFFFFF?text=Kyle" },
-      { name: "僧侶サラ", img: "https://via.placeholder.com/150/008000/FFFFFF?text=Sara" },
-      { name: "ドラゴン", img: "https://via.placeholder.com/150/FFA500/FFFFFF?text=Dragon" }
+    const rarityLabel = { "common": "ノーマル", "rare": "レア", "super-rare": "スーパーレア", "ultra-rare": "ウルトラレア" };
+    const rarityChances = { "common": 50, "rare": 30, "super-rare": 15, "ultra-rare": 5 };
+    const items = [
+      { id: 1, name: "グラサン", image: "as.png", rarity: "common" },
+      { id: 2, name: "コーヒー", image: "cup-caffee.png", rarity: "common" },
+      { id: 3, name: "ドラム缶", image: "trsf.png", rarity: "rare" },
+      { id: 4, name: "髭", image: "984552 (1).png", rarity: "rare" },
+      { id: 5, name: "サイト", image: "サイト.png", rarity: "super-rare" },
+      { id: 6, name: "ちくわ", image: "ちくわ.png", rarity: "super-rare" },
+      { id: 7, name: "鳥つくね", image: "鶏つくね.png", rarity: "ultra-rare" }
     ];
 
-    // ガチャ実行
-    window.doGacha = async (btn) => {
+    // ログイン確認
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) return location.href = "login.html";
+      currentUser = user;
+      await loadZukan();
+      await countTodayPulls();
+    });
+
+    function getRandomRarity() {
+      const rand = Math.random() * 100;
+      let total = 0;
+      for (const [rarity, chance] of Object.entries(rarityChances)) {
+        total += chance;
+        if (rand < total) return rarity;
+      }
+      return "common";
+    }
+
+    // ガチャ処理
+    window.rollGacha = async () => {
       if (!currentUser) return alert("ログインしてください");
-      btn.disabled = true; btn.textContent = "抽選中...";
-
-      try {
-        // ランダム抽選
-        const char = characters[Math.floor(Math.random() * characters.length)];
-
-        // Firestoreに保存
-        await addDoc(collection(db, "users", currentUser.uid, "characters"), {
-          name: char.name,
-          img: char.img,
-          obtainedAt: serverTimestamp()
-        });
-
-        // 画面に表示
-        document.getElementById("char-name").textContent = char.name;
-        document.getElementById("char-img").src = char.img;
-        document.getElementById("result-box").classList.remove("hidden");
-      } catch (err) {
-        alert("ガチャ失敗: " + err.message);
+      if (todayPulls >= maxPullsPerDay) {
+        document.getElementById("limitMessage").innerText = `本日は${maxPullsPerDay}回までです！`;
+        return;
       }
 
-      btn.disabled = false; btn.textContent = "ガチャを引く";
+      document.getElementById("limitMessage").innerText = "";
+      document.getElementById("gachaSound").play();
+
+      const rarity = getRandomRarity();
+      const pool = items.filter(item => item.rarity === rarity);
+      const item = pool[Math.floor(Math.random() * pool.length)];
+
+      try {
+        // Firestoreに保存
+        await addDoc(collection(db, "users", currentUser.uid, "characters"), {
+          name: item.name,
+          image: item.image,
+          rarity: item.rarity,
+          obtainedAt: serverTimestamp(),
+          day: today
+        });
+
+        todayPulls++;
+        showResult(item);
+        await loadZukan();
+      } catch (err) {
+        alert("保存エラー: " + err.message);
+      }
     };
+
+    function showResult(item) {
+      const resultDiv = document.getElementById("result");
+      const specialEffect = item.rarity === "ultra-rare" ? '<div class="special-effect">✨確定演出!!✨</div>' : "";
+      resultDiv.innerHTML = `
+        ${specialEffect}
+        <div class="fade-in">
+          <img src="${item.image}" class="item-image">
+          <div class="item-name">${item.name}</div>
+          <div class="rarity ${item.rarity}">${rarityLabel[item.rarity]}</div>
+        </div>
+      `;
+    }
+
+    async function loadZukan() {
+      const snap = await getDocs(collection(db, "users", currentUser.uid, "characters"));
+      const zukan = document.getElementById("zukan");
+      zukan.innerHTML = "";
+
+      const owned = {};
+      snap.forEach(doc => {
+        const data = doc.data();
+        owned[data.name] = (owned[data.name] || 0) + 1;
+      });
+
+      items.forEach(item => {
+        const count = owned[item.name] || 0;
+        const imgClass = count > 0 ? "" : "unknown";
+        const imgSrc = count > 0 ? item.image : "https://cdn.pixabay.com/photo/2016/08/20/05/39/question-mark-1600718_1280.png";
+        const name = count > 0 ? `${item.name} × ${count}` : "？？？";
+
+        zukan.innerHTML += `
+          <div class="zukan-item">
+            <img src="${imgSrc}" class="${imgClass}">
+            <div>${name}</div>
+          </div>
+        `;
+      });
+    }
+
+    async function countTodayPulls() {
+      const snap = await getDocs(query(collection(db, "users", currentUser.uid, "characters"), where("day", "==", today)));
+      todayPulls = snap.size;
+    }
   </script>
 </body>
 </html>
