@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>マイキャラ一覧 | Daily Feed</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-100 min-h-screen flex items-center justify-center">
+
+  <div class="bg-white rounded-2xl shadow-xl p-6 w-full max-w-4xl">
+    <h1 class="text-2xl font-bold text-gray-800 mb-6 text-center">マイキャラ一覧</h1>
+
+    <!-- フィルタ & ソート -->
+    <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-3">
+      <div>
+        <label class="mr-2 font-semibold">レアリティフィルタ:</label>
+        <select id="filter" class="border rounded-lg px-3 py-1">
+          <option value="all">すべて</option>
+          <option value="common">ノーマル</option>
+          <option value="rare">レア</option>
+          <option value="super-rare">スーパーレア</option>
+          <option value="ultra-rare">ウルトラレア</option>
+        </select>
+      </div>
+      <div>
+        <label class="mr-2 font-semibold">ソート:</label>
+        <select id="sort" class="border rounded-lg px-3 py-1">
+          <option value="newest">新しい順</option>
+          <option value="oldest">古い順</option>
+          <option value="rarity">レアリティ順</option>
+          <option value="name">名前順</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- キャラリスト -->
+    <div id="char-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6"></div>
+
+    <!-- 戻る -->
+    <div class="text-center mt-6">
+      <a href="./home.html" class="px-6 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition">マイページへ戻る</a>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+    // 🔑 Firebase設定
+    const firebaseConfig = {
+apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
+  authDomain: "daily-feed-414b6.firebaseapp.com",
+  databaseURL: "https://daily-feed-414b6-default-rtdb.firebaseio.com",
+  projectId: "daily-feed-414b6",
+  storageBucket: "daily-feed-414b6.firebasestorage.app",
+  messagingSenderId: "360432327059",
+  appId: "1:360432327059:web:0cb52176305190294d3066",
+  measurementId: "G-0R08TWS1WP"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const rarityColors = {
+      "common": "bg-gray-400 text-white",
+      "rare": "bg-blue-500 text-white",
+      "super-rare": "bg-yellow-400 text-black",
+      "ultra-rare": "bg-purple-600 text-white"
+    };
+
+    let allCharacters = []; // Firestoreから取得したデータ
+    let aggregated = [];    // 集計後データ
+
+    // 認証チェック
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) return location.href = "login.html";
+      await loadCharacters(user.uid);
+
+      // フィルタとソートにイベントリスナー
+      document.getElementById("filter").addEventListener("change", renderCharacters);
+      document.getElementById("sort").addEventListener("change", renderCharacters);
+    });
+
+    // Firestoreからキャラ読み込み
+    async function loadCharacters(uid) {
+      const snap = await getDocs(collection(db, "users", uid, "characters"));
+      allCharacters = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      aggregateCharacters();
+      renderCharacters();
+    }
+
+    // キャラを集計（所持数カウント）
+    function aggregateCharacters() {
+      const map = {};
+      allCharacters.forEach(c => {
+        if (!map[c.name]) {
+          map[c.name] = { ...c, count: 0 };
+        }
+        map[c.name].count++;
+      });
+      aggregated = Object.values(map);
+    }
+
+    // レアリティの順序
+    const rarityOrder = { "ultra-rare": 1, "super-rare": 2, "rare": 3, "common": 4 };
+
+    // キャラ描画
+    function renderCharacters() {
+      const filter = document.getElementById("filter").value;
+      const sort = document.getElementById("sort").value;
+      const charList = document.getElementById("char-list");
+      charList.innerHTML = "";
+
+      let chars = [...aggregated];
+
+      // フィルタ
+      if (filter !== "all") {
+        chars = chars.filter(c => c.rarity === filter);
+      }
+
+      // ソート
+      if (sort === "rarity") {
+        chars.sort((a, b) => rarityOrder[a.rarity] - rarityOrder[b.rarity]);
+      } else if (sort === "name") {
+        chars.sort((a, b) => a.name.localeCompare(b.name));
+      } else if (sort === "oldest") {
+        chars.sort((a, b) => (a.obtainedAt?.seconds || 0) - (b.obtainedAt?.seconds || 0));
+      } else {
+        // newest
+        chars.sort((a, b) => (b.obtainedAt?.seconds || 0) - (a.obtainedAt?.seconds || 0));
+      }
+
+      if (chars.length === 0) {
+        charList.innerHTML = "<p class='text-center text-gray-500 col-span-3'>条件に一致するキャラがいません。</p>";
+        return;
+      }
+
+      // カードUI生成
+      chars.forEach(c => {
+        const rarityClass = rarityColors[c.rarity] || "bg-gray-300 text-black";
+        const obtained = c.obtainedAt?.toDate ? c.obtainedAt.toDate().toLocaleString() : "不明";
+
+        charList.innerHTML += `
+          <div class="border rounded-xl p-4 shadow hover:shadow-lg transition bg-white flex flex-col items-center">
+            <img src="${c.image}" alt="${c.name}" class="w-24 h-24 mx-auto rounded-lg mb-3">
+            <h3 class="text-lg font-semibold text-gray-700">${c.name} ×${c.count}</h3>
+            <span class="inline-block mt-1 px-3 py-1 rounded-full text-sm ${rarityClass}">
+              ${c.rarity}
+            </span>
+            <p class="text-xs text-gray-500 mt-2">最初の入手: ${obtained}</p>
+            <a href="battle.html?char=${encodeURIComponent(c.name)}" 
+               class="mt-3 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm">
+               このキャラでバトル
+            </a>
+          </div>
+        `;
+      });
+    }
+  </script>
+</body>
+</html>
