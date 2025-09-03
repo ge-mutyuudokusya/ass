@@ -49,11 +49,13 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-    import { getFirestore, collection, addDoc, getDocs, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import { 
+      getFirestore, collection, addDoc, getDocs, query, where, serverTimestamp 
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-    // 🔑 Firebase設定
+    // ✅ Firebase設定（必ず自分の値に置き換えてください）
     const firebaseConfig = {
- apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
+    apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
   authDomain: "daily-feed-414b6.firebaseapp.com",
   databaseURL: "https://daily-feed-414b6-default-rtdb.firebaseio.com",
   projectId: "daily-feed-414b6",
@@ -84,7 +86,7 @@
       { id: 7, name: "鳥つくね", image: "鶏つくね.png", rarity: "ultra-rare" }
     ];
 
-    // ログイン確認
+    // ✅ ログイン確認
     onAuthStateChanged(auth, async (user) => {
       if (!user) return location.href = "login.html";
       currentUser = user;
@@ -102,7 +104,7 @@
       return "common";
     }
 
-    // ガチャ処理
+    // ✅ ガチャ処理
     window.rollGacha = async () => {
       if (!currentUser) return alert("ログインしてください");
       if (todayPulls >= maxPullsPerDay) {
@@ -118,7 +120,6 @@
       const item = pool[Math.floor(Math.random() * pool.length)];
 
       try {
-        // Firestoreに保存
         await addDoc(collection(db, "users", currentUser.uid, "characters"), {
           name: item.name,
           image: item.image,
@@ -131,7 +132,7 @@
         showResult(item);
         await loadZukan();
       } catch (err) {
-        alert("保存エラー: " + err.message);
+        alert("Firestore保存エラー: " + err.message);
       }
     };
 
@@ -175,7 +176,9 @@
     }
 
     async function countTodayPulls() {
-      const snap = await getDocs(query(collection(db, "users", currentUser.uid, "characters"), where("day", "==", today)));
+      const snap = await getDocs(
+        query(collection(db, "users", currentUser.uid, "characters"), where("day", "==", today))
+      );
       todayPulls = snap.size;
     }
   </script>
