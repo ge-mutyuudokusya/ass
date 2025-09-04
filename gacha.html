@@ -2,58 +2,218 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>制限付きガチャ</title>
+  <title>ガチャ | Daily Feed</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+
   <style>
-    body { background: #eef6fb; font-family: 'Arial', sans-serif; text-align: center; padding: 20px; }
-    h1 { font-size: 1.8em; color: #333; }
-    .gacha-machine, .zukan { background: #fff; border: 3px solid #ccc; border-radius: 16px; padding: 16px; max-width: 500px; margin: 20px auto; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
-    .gacha-button { background-color: #ff4d4d; color: white; font-size: 1.1em; padding: 12px 24px; border: none; border-radius: 10px; cursor: pointer; }
-    .gacha-button:hover { background-color: #e60000; }
-    .result { margin-top: 20px; min-height: 200px; }
-    .item-image { width: 100%; max-width: 180px; height: auto; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.2); }
-    .item-name { font-size: 1.2em; margin-top: 10px; }
-    .rarity { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.9em; color: white; margin-top: 6px; }
-    .common { background-color: gray; }
-    .rare { background-color: dodgerblue; }
-    .super-rare { background-color: gold; color: black; }
-    .ultra-rare { background-color: purple; }
-    .zukan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 10px; margin-top: 15px; }
-    .zukan-item img { width: 100%; height: auto; object-fit: contain; border-radius: 10px; background-color: #f8f8f8; }
-    .zukan-item { font-size: 0.8em; }
-    .unknown { filter: grayscale(1) blur(2px); }
-    .fade-in { animation: fadeInScale 0.5s ease-out; }
-    @keyframes fadeInScale { 0% { opacity: 0; transform: scale(0.6); } 100% { opacity: 1; transform: scale(1); } }
-    .limit-warning { color: red; font-weight: bold; margin-top: 10px; }
-    .special-effect { font-size: 2em; animation: flash 1s infinite alternate; color: gold; }
-    @keyframes flash { from { opacity: 0.3; } to { opacity: 1; } }
+    /* ===== 豪華背景（グラデ＋パーティクル） ===== */
+    body {
+      min-height: 100vh;
+      background: radial-gradient(1200px 600px at 10% 10%, rgba(255,255,255,0.35), rgba(255,255,255,0) 60%),
+                  radial-gradient(800px 800px at 90% 0%, rgba(255,255,255,0.25), rgba(255,255,255,0) 60%),
+                  linear-gradient(120deg, #e7d6ff, #c8ddff 40%, #ffe3f0 80%);
+      overflow-x: hidden;
+    }
+    .particles {
+      position: fixed; inset: 0; pointer-events: none; overflow: hidden;
+    }
+    .particle {
+      position: absolute; width: 4px; height: 4px; border-radius: 9999px;
+      background: rgba(255,255,255,0.9);
+      animation: float 12s linear infinite;
+      filter: drop-shadow(0 0 6px rgba(255,255,255,0.8));
+    }
+    @keyframes float {
+      0%   { transform: translateY(110vh) translateX(0) scale(0.6); opacity: 0; }
+      10%  { opacity: 1; }
+      100% { transform: translateY(-10vh) translateX(60px) scale(1.2); opacity: 0; }
+    }
+
+    /* ===== ガチャ筐体の簡易アニメ ===== */
+    .machine { width: 300px; max-width: 84vw; }
+    .capsule {
+      width: 54px; height: 54px; border-radius: 9999px; background: #ffd85a;
+      position: absolute; bottom: 40px; left: calc(50% - 27px);
+      box-shadow: inset 0 10px 14px rgba(0,0,0,0.15), 0 4px 14px rgba(0,0,0,0.2);
+      transform: translateY(0);
+      opacity: 0;
+    }
+    .capsule.show { animation: drop 0.9s ease-out forwards; }
+    @keyframes drop {
+      0%   { transform: translateY(-180px) scale(0.9); opacity: 0; }
+      50%  { opacity: 1; }
+      90%  { transform: translateY(0) scale(1.0); }
+      100% { transform: translateY(0); }
+    }
+    .handle:active { transform: rotate(18deg); transform-origin: right center; }
+
+    /* ===== 結果カードの演出 ===== */
+    .reveal { animation: pop 420ms cubic-bezier(.2,.8,.2,1) both; }
+    @keyframes pop {
+      0% { transform: scale(.7); opacity: 0; }
+      70% { transform: scale(1.06); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+    .glow { box-shadow: 0 0 0 0 rgba(255,215,0,.0); animation: glow 1.2s ease-in-out both; }
+    @keyframes glow {
+      0%   { box-shadow: 0 0 0 0 rgba(255,215,0,.0); }
+      50%  { box-shadow: 0 0 40px 10px rgba(255,215,0,.55); }
+      100% { box-shadow: 0 0 24px 6px rgba(255,215,0,.35); }
+    }
+
+    /* ===== UR特殊演出（スパーク＋簡易コンフェッティ） ===== */
+    .ur-overlay {
+      position: fixed; inset: 0; pointer-events: none; display: none;
+    }
+    .ur-overlay.show { display: block; }
+    .spark {
+      position: absolute; width: 6px; height: 36px; border-radius: 3px;
+      background: linear-gradient(to bottom, #fff, #ffcc33 60%, rgba(255,255,255,0));
+      filter: drop-shadow(0 0 12px #ffd700);
+      transform-origin: top center;
+      animation: sparkFall 950ms ease-out forwards;
+    }
+    @keyframes sparkFall {
+      0%   { transform: translateY(-10vh) rotate(0deg) scaleY(0.6); opacity: 0; }
+      20%  { opacity: 1; }
+      100% { transform: translateY(90vh) rotate(180deg) scaleY(1); opacity: 0; }
+    }
+    .confetti {
+      position: absolute; width: 8px; height: 14px;
+      opacity: .9;
+      animation: confetti 1200ms cubic-bezier(.2,.8,.2,1) forwards;
+    }
+    @keyframes confetti {
+      0%   { transform: translateY(-12vh) rotate(0deg); opacity: 0; }
+      14%  { opacity: 1; }
+      100% { transform: translateY(100vh) rotate(540deg); opacity: 0; }
+    }
+
+    /* ===== トークンのバッジ ===== */
+    .token-badge { backdrop-filter: blur(6px); }
   </style>
 </head>
-<body>
-  <h1> ガチャガチャ1日5回</h1>
-  <div class="gacha-machine">
-    <button class="gacha-button" onclick="rollGacha()">ガチャを回す！</button>
-    <div class="result" id="result"></div>
-    <div id="limitMessage" class="limit-warning"></div>
-  </div>
+<body class="flex flex-col items-center">
 
-  <div class="zukan">
-    <h2>図鑑</h2>
-    <div class="zukan-grid" id="zukan"></div>
-  </div>
+  <!-- 背景のパーティクル -->
+  <div class="particles" id="particles"></div>
 
-  <audio id="gachaSound" preload="auto">
-    <source src="https://assets.mixkit.co/sfx/download/mixkit-arcade-retro-game-over-213.wav" type="audio/mpeg">
-  </audio>
+  <!-- ヘッダー -->
+  <header class="w-full max-w-4xl px-4 py-4 flex items-center justify-between">
+    <a href="./home.html" class="text-sm sm:text-base text-gray-600 hover:underline">← ホームへ</a>
+    <div class="flex items-center gap-2">
+      <span class="text-sm sm:text-base text-gray-700">トークン</span>
+      <span id="tokenCount" class="token-badge text-xs sm:text-sm px-3 py-1 rounded-full bg-white/70 shadow">
+        ...
+      </span>
+      <button id="btnRefresh" class="text-xs sm:text-sm px-3 py-1 rounded-lg bg-white/70 hover:bg-white shadow">
+        更新
+      </button>
+    </div>
+  </header>
 
+  <!-- メイン -->
+  <main class="w-full max-w-4xl px-4 pb-24">
+    <div class="mx-auto grid lg:grid-cols-2 gap-8 items-center">
+      <!-- ガチャ筐体 -->
+      <div class="machine mx-auto bg-white/70 rounded-3xl shadow-2xl p-4 sm:p-6 relative">
+        <!-- 簡易イラスト（SVG） -->
+        <svg viewBox="0 0 280 360" class="w-full">
+          <!-- ドーム -->
+          <ellipse cx="140" cy="100" rx="110" ry="85" fill="url(#glassGrad)" />
+          <defs>
+            <radialGradient id="glassGrad" cx="40%" cy="30%">
+              <stop offset="0%" stop-color="#ffffff" stop-opacity=".85"/>
+              <stop offset="65%" stop-color="#cfe9ff" stop-opacity=".6"/>
+              <stop offset="100%" stop-color="#a3bfff" stop-opacity=".35"/>
+            </radialGradient>
+            <linearGradient id="bodyGrad" x1="0" x2="1">
+              <stop offset="0%" stop-color="#ff6b6b"/>
+              <stop offset="100%" stop-color="#ff9f43"/>
+            </linearGradient>
+          </defs>
+
+          <!-- カプセルが見える球（飾り） -->
+          <g opacity=".35">
+            <circle cx="90" cy="85" r="10" fill="#fff" />
+            <circle cx="120" cy="120" r="8" fill="#fff" />
+            <circle cx="170" cy="70" r="7" fill="#fff" />
+            <circle cx="210" cy="115" r="9" fill="#fff" />
+          </g>
+
+          <!-- 本体 -->
+          <rect x="40" y="170" width="200" height="140" rx="18" fill="url(#bodyGrad)"/>
+          <!-- 投入口 -->
+          <rect x="80" y="185" width="120" height="28" rx="6" fill="#fff" opacity=".8"/>
+          <!-- 取出口 -->
+          <rect x="95" y="300" width="90" height="26" rx="6" fill="#333" opacity=".8"/>
+          <!-- ハンドル -->
+          <g id="handle" class="handle cursor-pointer transition active:scale-95" transform="translate(210,200)">
+            <circle cx="0" cy="0" r="16" fill="#fff"/>
+            <rect x="-4" y="12" width="8" height="36" rx="4" fill="#fff"/>
+            <circle cx="0" cy="56" r="14" fill="#ffe08a" stroke="#d1a800" stroke-width="2"/>
+          </g>
+        </svg>
+
+        <!-- 飛び出すカプセル -->
+        <div id="capsule" class="capsule"></div>
+
+        <!-- 回すボタン（スマホ親指向けサイズ） -->
+        <div class="mt-4 flex justify-center">
+          <button id="btnRoll"
+            class="w-full sm:w-auto px-8 py-3 text-base sm:text-lg font-semibold rounded-full text-white
+                   bg-indigo-600 hover:bg-indigo-700 shadow-lg active:scale-95 transition">
+            ガチャを回す（1トークン）
+          </button>
+        </div>
+
+        <p class="text-center text-xs text-gray-600 mt-2">(ハンドルをタップしても回せます)</p>
+      </div>
+
+      <!-- 結果カード -->
+      <div class="bg-white/80 backdrop-blur rounded-3xl shadow-2xl p-5 sm:p-7">
+        <h2 class="text-xl sm:text-2xl font-bold mb-4 text-gray-800">結果</h2>
+        <div id="resultCard"
+             class="reveal rounded-2xl border border-gray-100 shadow p-4 sm:p-6 flex items-center gap-4">
+          <img id="charImg" src="https://via.placeholder.com/140x140?text=GACHA"
+               class="w-24 h-24 sm:w-32 sm:h-32 object-contain rounded-xl bg-white" alt="キャラ" />
+          <div class="flex-1">
+            <div class="mb-1">
+              <span id="rarityBadge" class="inline-block text-xs sm:text-sm px-2 py-1 rounded-full bg-gray-200 text-gray-700">--</span>
+            </div>
+            <p id="charName" class="text-lg sm:text-xl font-semibold text-gray-800">まだ結果はありません</p>
+            <p id="charDesc" class="text-sm text-gray-500">ここに説明が入ります</p>
+          </div>
+        </div>
+        <p id="hint" class="text-xs sm:text-sm text-gray-600 mt-4">
+          レア度によって演出が変わります。URが出ると金色の光＋スパーク演出！
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <!-- UR特殊演出オーバーレイ -->
+  <div id="urFx" class="ur-overlay"></div>
+
+  <!-- 効果音（差し替え可） -->
+  <audio id="se-n"  src="./sounds/common.mp3"   preload="auto"></audio>
+  <audio id="se-r"  src="./sounds/rare.mp3"     preload="auto"></audio>
+  <audio id="se-sr" src="./sounds/superrare.mp3"preload="auto"></audio>
+  <audio id="se-ur" src="./sounds/ultrarare.mp3"preload="auto"></audio>
+
+  <!-- Firebase ロジック -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, addDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, updateDoc, runTransaction,
+      collection, addDoc, serverTimestamp, increment
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-    // ✅ Firebase設定
+    /* ==== Firebase 設定（自分の値に置き換え） ==== */
     const firebaseConfig = {
-apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
+   apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
   authDomain: "daily-feed-414b6.firebaseapp.com",
   databaseURL: "https://daily-feed-414b6-default-rtdb.firebaseio.com",
   projectId: "daily-feed-414b6",
@@ -65,109 +225,228 @@ apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
-    const db = getFirestore(app);
+    const db   = getFirestore(app);
 
-    const rarityLabel = { "common": "ノーマル", "rare": "レア", "super-rare": "スーパーレア", "ultra-rare": "ウルトラレア" };
-    const rarityChances = { "common": 50, "rare": 30, "super-rare": 15, "ultra-rare": 5 };
-    const maxPullsPerDay = 5;
-    const today = new Date().toLocaleDateString();
+    /* ==== キャラプール（画像URLは差し替え可） ==== */
+    const pool = {
+      N: [
+        { name: "スライム", imageURL: "./img/slime.png", desc: "プニプニ。初心者の味方。" },
+        { name: "コウモリ", imageURL: "./img/bat.png",   desc: "夜行性。すばやい。" }
+      ],
+      R: [
+        { name: "ゴブリン", imageURL: "./img/goblin.png", desc: "集団で襲うのが得意。" },
+        { name: "ウルフ",   imageURL: "./img/wolf.png",   desc: "群れで狩るハンター。" }
+      ],
+      SR: [
+        { name: "ドラゴン", imageURL: "./img/dragon.png",  desc: "咆哮で敵を威圧する。" },
+        { name: "フェニックス", imageURL: "./img/phoenix.png", desc: "蘇る炎の鳥。" }
+      ],
+      UR: [
+        { name: "ユニコーン", imageURL: "./img/unicorn.png", desc: "聖なる角が輝く。" }
+      ]
+    };
 
-    const items = [
-      { id: 1, name: "グラサン", image: "as.png", rarity: "common" },
-      { id: 2, name: "コーヒー", image: "cup-caffee.png", rarity: "common" },
-      { id: 3, name: "ドラム缶", image: "trsf.png", rarity: "rare" },
-      { id: 4, name: "髭", image: "984552 (1).png", rarity: "rare" },
-      { id: 5, name: "サイト", image: "サイト.png", rarity: "super-rare" },
-      { id: 6, name: "ちくわ", image: "ちくわ.png", rarity: "super-rare" },
-      { id: 7, name: "鳥つくね", image: "鶏つくね.png", rarity: "ultra-rare" }
+    /* ==== レア度の確率（合計100） ==== */
+    const rarityWeights = [
+      { key: "N",  w: 60 },
+      { key: "R",  w: 25 },
+      { key: "SR", w: 12 },
+      { key: "UR", w: 3  }
     ];
 
-    let currentUser = null;
-    let owned = {};
+    /* ==== レア度の見た目設定 ==== */
+    const rarityStyles = {
+      N:  { badge: "bg-gray-200 text-gray-700", glow: "" },
+      R:  { badge: "bg-blue-200 text-blue-700", glow: "" },
+      SR: { badge: "bg-purple-200 text-purple-700", glow: "" },
+      UR: { badge: "bg-yellow-200 text-yellow-700", glow: "glow" }
+    };
 
-    // ✅ ユーザー確認
+    /* ==== UI要素 ==== */
+    const tokenCountEl = document.getElementById("tokenCount");
+    const btnRefresh   = document.getElementById("btnRefresh");
+    const btnRoll      = document.getElementById("btnRoll");
+    const handle       = document.getElementById("handle");
+    const capsule      = document.getElementById("capsule");
+    const resultCard   = document.getElementById("resultCard");
+    const charImg      = document.getElementById("charImg");
+    const charName     = document.getElementById("charName");
+    const charDesc     = document.getElementById("charDesc");
+    const rarityBadge  = document.getElementById("rarityBadge");
+    const urFx         = document.getElementById("urFx");
+
+    /* ==== 背景パーティクル生成 ==== */
+    const particles = document.getElementById("particles");
+    for (let i=0; i<48; i++) {
+      const p = document.createElement("div");
+      p.className = "particle";
+      p.style.left = Math.random()*100 + "vw";
+      p.style.animationDelay = (Math.random()*12) + "s";
+      p.style.animationDuration = (10 + Math.random()*8) + "s";
+      p.style.opacity = 0.4 + Math.random()*0.6;
+      particles.appendChild(p);
+    }
+
+    /* ==== トークン表示/取得 ==== */
+    let currentUser = null;
+    async function ensureUserDoc(uid) {
+      const ref = doc(db, "users", uid);
+      const s = await getDoc(ref);
+      if (!s.exists()) {
+        await setDoc(ref, { tokens: 0, createdAt: serverTimestamp() }, { merge: true });
+        return { tokens: 0 };
+      }
+      return s.data();
+    }
+    async function refreshTokens() {
+      if (!currentUser) return;
+      const data = await ensureUserDoc(currentUser.uid);
+      tokenCountEl.textContent = data.tokens ?? 0;
+    }
+
     onAuthStateChanged(auth, async (user) => {
-      if (!user) return location.href = "login.html";
+      if (!user) { location.href = "login.html"; return; }
       currentUser = user;
-      await loadOwned();
-      updateZukan();
+      await refreshTokens();
     });
 
-    async function loadOwned() {
-      owned = {};
-      const snap = await getDoc(doc(db, "users", currentUser.uid, "gachaHistory", today));
-      if (!snap.exists()) {
-        await setDoc(doc(db, "users", currentUser.uid, "gachaHistory", today), { count: 0 });
+    btnRefresh.addEventListener("click", refreshTokens);
+
+    /* ==== 確率抽選 ==== */
+    function rollRarity() {
+      const r = Math.random()*100;
+      let acc = 0;
+      for (const item of rarityWeights) {
+        acc += item.w;
+        if (r < acc) return item.key;
       }
+      return "N";
+    }
+    function drawCharacter() {
+      const rarity = rollRarity();
+      const list = pool[rarity];
+      const pick = list[Math.floor(Math.random()*list.length)];
+      return { rarity, ...pick };
     }
 
-    async function rollGacha() {
-      if (!currentUser) return alert("ログインしてください");
+    /* ==== UR特殊演出 ==== */
+    function playURFx() {
+      urFx.innerHTML = "";
+      urFx.classList.add("show");
+      // スパーク
+      for (let i=0; i<22; i++) {
+        const s = document.createElement("div");
+        s.className = "spark";
+        s.style.left = (Math.random()*100) + "vw";
+        s.style.animationDelay = (Math.random()*0.4) + "s";
+        urFx.appendChild(s);
+      }
+      // コンフェッティ
+      const colors = ["#ffd700","#ff6b6b","#6bc2ff","#b57bff","#79e07e","#ffffff"];
+      for (let i=0; i<60; i++) {
+        const c = document.createElement("div");
+        c.className = "confetti";
+        c.style.left = (Math.random()*100) + "vw";
+        c.style.background = colors[Math.floor(Math.random()*colors.length)];
+        c.style.top = (Math.random()*10) + "vh";
+        c.style.transform = `translateY(-12vh) rotate(${Math.random()*360}deg)`;
+        c.style.animationDelay = (Math.random()*0.4) + "s";
+        urFx.appendChild(c);
+      }
+      // 一定時間で消す
+      setTimeout(()=> urFx.classList.remove("show"), 1400);
+    }
 
-      // 今日の回数チェック
-      const historyRef = doc(db, "users", currentUser.uid, "gachaHistory", today);
-      const snap = await getDoc(historyRef);
-      let pulls = snap.exists() ? snap.data().count : 0;
-      if (pulls >= maxPullsPerDay) {
-        document.getElementById("limitMessage").innerText = `本日は${maxPullsPerDay}回までです！`;
+    /* ==== 効果音 ==== */
+    const se = {
+      N:  document.getElementById("se-n"),
+      R:  document.getElementById("se-r"),
+      SR: document.getElementById("se-sr"),
+      UR: document.getElementById("se-ur"),
+    };
+    function playSE(rarity) { try { se[rarity]?.currentTime = 0; se[rarity]?.play(); } catch(e){} }
+
+    /* ==== カプセル演出 ==== */
+    async function playCapsule() {
+      capsule.classList.remove("show");
+      void capsule.offsetWidth; // reflow
+      capsule.classList.add("show");
+      await new Promise(r => setTimeout(r, 900));
+    }
+
+    /* ==== トークン消費（原子的にチェック＆-1） ==== */
+    async function consumeToken(uid) {
+      const ref = doc(db, "users", uid);
+      return await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        const tokens = snap.exists() ? (snap.data().tokens || 0) : 0;
+        if (tokens <= 0) { return false; }
+        tx.update(ref, { tokens: increment(-1) });
+        return true;
+      });
+    }
+
+    /* ==== 結果の保存 ==== */
+    async function saveCharacter(uid, result) {
+      const ref = collection(db, "users", uid, "characters");
+      await addDoc(ref, {
+        name: result.name,
+        rarity: result.rarity,
+        imageURL: result.imageURL,
+        desc: result.desc,
+        timestamp: serverTimestamp()
+      });
+    }
+
+    /* ==== UI反映 ==== */
+    function renderResult({ rarity, name, imageURL, desc }) {
+      charImg.src = imageURL || "https://via.placeholder.com/140x140?text=CHAR";
+      charName.textContent = name;
+      charDesc.textContent = desc || "";
+      rarityBadge.textContent = rarity;
+      rarityBadge.className =
+        "inline-block text-xs sm:text-sm px-2 py-1 rounded-full " + (rarityStyles[rarity]?.badge || "bg-gray-200");
+
+      // URだけ黄金のグロー
+      resultCard.classList.remove("glow");
+      if (rarityStyles[rarity]?.glow) resultCard.classList.add(rarityStyles[rarity].glow);
+    }
+
+    /* ==== ガチャを回す ==== */
+    let rolling = false;
+    async function roll() {
+      if (rolling || !currentUser) return;
+      rolling = true;
+      btnRoll.disabled = true;
+
+      // トークン消費
+      const ok = await consumeToken(currentUser.uid);
+      if (!ok) {
+        alert("トークンがありません！QRで1日1回チャージしてください。");
+        btnRoll.disabled = false; rolling = false;
         return;
       }
+      await refreshTokens();
 
-      document.getElementById("limitMessage").innerText = "";
-      document.getElementById("gachaSound").play();
+      // 演出 → 抽選
+      await playCapsule();
+      const result = drawCharacter();
 
-      // レアリティ抽選
-      const rarity = getRandomRarity();
-      const pool = items.filter(item => item.rarity === rarity);
-      const item = pool[Math.floor(Math.random() * pool.length)];
+      // 効果音・演出
+      playSE(result.rarity);
+      if (result.rarity === "UR") playURFx();
 
-      // Firestoreに保存
-      await addDoc(collection(db, "users", currentUser.uid, "characters"), {
-        name: item.name,
-        image: item.image,
-        rarity: item.rarity,
-        obtainedAt: serverTimestamp()
-      });
+      // 表示・保存
+      renderResult(result);
+      await saveCharacter(currentUser.uid, result);
 
-      await setDoc(historyRef, { count: pulls + 1 });
-
-      // 表示
-      const resultDiv = document.getElementById("result");
-      const specialEffect = rarity === "ultra-rare" ? '<div class="special-effect">✨確定演出!!✨</div>' : "";
-      resultDiv.innerHTML = `
-        ${specialEffect}
-        <div class="fade-in">
-          <img src="${item.image}" class="item-image">
-          <div class="item-name">${item.name}</div>
-          <div class="rarity ${item.rarity}">${rarityLabel[item.rarity]}</div>
-        </div>
-      `;
-
-      updateZukan();
+      btnRoll.disabled = false;
+      rolling = false;
     }
 
-    function getRandomRarity() {
-      const rand = Math.random() * 100;
-      let total = 0;
-      for (const [rarity, chance] of Object.entries(rarityChances)) {
-        total += chance;
-        if (rand < total) return rarity;
-      }
-      return "common";
-    }
-
-    async function updateZukan() {
-      const zukan = document.getElementById("zukan");
-      zukan.innerHTML = "";
-      items.forEach(item => {
-        zukan.innerHTML += `
-          <div class="zukan-item">
-            <img src="${item.image}" class="">
-            <div>${item.name}</div>
-          </div>
-        `;
-      });
-    }
+    // ボタンとハンドルのイベント
+    btnRoll.addEventListener("click", roll);
+    handle.addEventListener("click", roll);
   </script>
 </body>
 </html>
