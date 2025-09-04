@@ -20,7 +20,14 @@
     <!-- QRスキャン領域 -->
     <div id="reader" class="rounded-xl overflow-hidden shadow"></div>
 
-    <!-- 結果 -->
+    <!-- カメラ切り替えボタン -->
+    <div class="mt-4 flex justify-center">
+      <button id="switchBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm">
+        カメラ切り替え
+      </button>
+    </div>
+
+    <!-- 結果表示 -->
     <div id="message" class="mt-4 text-center text-gray-700 text-sm"></div>
 
     <div class="mt-6 text-center">
@@ -33,9 +40,9 @@
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
     import { getFirestore, doc, getDoc, updateDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
 
-    // 🔑 Firebase設定（自分の値に置き換えてください）
+    // 🔑 Firebase設定（自分のプロジェクト値に差し替えてください）
     const firebaseConfig = {
-apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
+      apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
   authDomain: "daily-feed-414b6.firebaseapp.com",
   databaseURL: "https://daily-feed-414b6-default-rtdb.firebaseio.com",
   projectId: "daily-feed-414b6",
@@ -60,54 +67,73 @@ apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
       currentUser = user;
     });
 
-    // QRコード読み取り
-    function onScanSuccess(decodedText) {
+    // QR読み込み成功時
+    async function onScanSuccess(decodedText) {
       if (!currentUser) return;
-      // QRコードの内容チェック（例: "DAILYFEED2025" 固定文字列）
+      // 認証文字列チェック
       if (decodedText !== "DAILYFEED2025") {
         messageEl.textContent = "無効なQRコードです。";
         return;
       }
-      grantToken(currentUser.uid);
-    }
 
-    async function grantToken(uid) {
-      const ref = doc(db, "users", uid);
+      // Firestoreにトークン付与
+      const ref = doc(db, "users", currentUser.uid);
       const snap = await getDoc(ref);
-      const today = new Date().toISOString().slice(0,10); // YYYY-MM-DD
+      const today = new Date().toISOString().slice(0,10);
 
       if (!snap.exists()) {
         await setDoc(ref, { tokens: 1, lastQR: today, createdAt: serverTimestamp() });
-        messageEl.textContent = "本日のトークン(+1)を付与しました！";
+        messageEl.textContent = "🎉 本日のトークン(+1)を初めて付与しました！";
         return;
       }
 
       const data = snap.data();
       if (data.lastQR === today) {
-        messageEl.textContent = "今日はすでに取得済みです。";
+        messageEl.textContent = "⚠️ 今日はすでに取得済みです。";
         return;
       }
 
       const newTokens = (data.tokens || 0) + 1;
       await updateDoc(ref, { tokens: newTokens, lastQR: today });
-      messageEl.textContent = "本日のトークン(+1)を付与しました！";
+      messageEl.textContent = "🎉 本日のトークン(+1)を付与しました！ 現在の所持: " + newTokens;
     }
 
-    // QRリーダー起動
+    // ===== カメラ起動と切り替え =====
     const html5QrCode = new Html5Qrcode("reader");
-    Html5Qrcode.getCameras().then(devices => {
-      if (devices && devices.length) {
-        const cameraId = devices[0].id;
-        html5QrCode.start(
-          cameraId,
-          { fps: 10, qrbox: 200 },
-          onScanSuccess
-        ).catch(err => {
-          messageEl.textContent = "カメラ起動に失敗しました: " + err;
-        });
+    let cameras = [];
+    let currentCameraIndex = 0;
+
+    Html5Qrcode.getCameras().then(async (devs) => {
+      cameras = devs;
+      if (cameras.length) {
+        currentCameraIndex = 0;
+        await startCamera(cameras[currentCameraIndex].id);
+      } else {
+        messageEl.textContent = "カメラが見つかりません。";
       }
-    }).catch(err => {
-      messageEl.textContent = "カメラが見つかりません: " + err;
+    });
+
+    async function startCamera(cameraId) {
+      if (html5QrCode._isScanning) {
+        await html5QrCode.stop();
+      }
+      await html5QrCode.start(
+        cameraId,
+        { fps: 10, qrbox: 200 },
+        onScanSuccess
+      ).catch(err => {
+        messageEl.textContent = "カメラ起動エラー: " + err;
+      });
+    }
+
+    document.getElementById("switchBtn").addEventListener("click", async () => {
+      if (cameras.length < 2) {
+        messageEl.textContent = "利用可能なカメラは1つしかありません。";
+        return;
+      }
+      currentCameraIndex = (currentCameraIndex + 1) % cameras.length;
+      await startCamera(cameras[currentCameraIndex].id);
+      messageEl.textContent = "📷 カメラを切り替えました。";
     });
   </script>
 </body>
