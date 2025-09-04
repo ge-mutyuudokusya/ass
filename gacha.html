@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -51,9 +49,11 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-    import { getFirestore, collection, addDoc, getDocs, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-  const firebaseConfig = {
- apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
+    import { getFirestore, doc, setDoc, getDoc, addDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+    // ✅ Firebase設定
+    const firebaseConfig = {
+apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
   authDomain: "daily-feed-414b6.firebaseapp.com",
   databaseURL: "https://daily-feed-414b6-default-rtdb.firebaseio.com",
   projectId: "daily-feed-414b6",
@@ -61,20 +61,17 @@
   messagingSenderId: "360432327059",
   appId: "1:360432327059:web:0cb52176305190294d3066",
   measurementId: "G-0R08TWS1WP"
-  };
-    
+    };
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    let currentUser = null;
-    let todayPulls = 0;
+    const rarityLabel = { "common": "ノーマル", "rare": "レア", "super-rare": "スーパーレア", "ultra-rare": "ウルトラレア" };
+    const rarityChances = { "common": 50, "rare": 30, "super-rare": 15, "ultra-rare": 5 };
     const maxPullsPerDay = 5;
     const today = new Date().toLocaleDateString();
 
-    const rarityLabel = { "common": "ノーマル", "rare": "レア", "super-rare": "スーパーレア", "ultra-rare": "ウルトラレア" };
-    const rarityChances = { "common": 50, "rare": 30, "super-rare": 15, "ultra-rare": 5 };
     const items = [
       { id: 1, name: "グラサン", image: "as.png", rarity: "common" },
       { id: 2, name: "コーヒー", image: "cup-caffee.png", rarity: "common" },
@@ -85,13 +82,69 @@
       { id: 7, name: "鳥つくね", image: "鶏つくね.png", rarity: "ultra-rare" }
     ];
 
-    // ログイン確認
+    let currentUser = null;
+    let owned = {};
+
+    // ✅ ユーザー確認
     onAuthStateChanged(auth, async (user) => {
       if (!user) return location.href = "login.html";
       currentUser = user;
-      await loadZukan();
-      await countTodayPulls();
+      await loadOwned();
+      updateZukan();
     });
+
+    async function loadOwned() {
+      owned = {};
+      const snap = await getDoc(doc(db, "users", currentUser.uid, "gachaHistory", today));
+      if (!snap.exists()) {
+        await setDoc(doc(db, "users", currentUser.uid, "gachaHistory", today), { count: 0 });
+      }
+    }
+
+    async function rollGacha() {
+      if (!currentUser) return alert("ログインしてください");
+
+      // 今日の回数チェック
+      const historyRef = doc(db, "users", currentUser.uid, "gachaHistory", today);
+      const snap = await getDoc(historyRef);
+      let pulls = snap.exists() ? snap.data().count : 0;
+      if (pulls >= maxPullsPerDay) {
+        document.getElementById("limitMessage").innerText = `本日は${maxPullsPerDay}回までです！`;
+        return;
+      }
+
+      document.getElementById("limitMessage").innerText = "";
+      document.getElementById("gachaSound").play();
+
+      // レアリティ抽選
+      const rarity = getRandomRarity();
+      const pool = items.filter(item => item.rarity === rarity);
+      const item = pool[Math.floor(Math.random() * pool.length)];
+
+      // Firestoreに保存
+      await addDoc(collection(db, "users", currentUser.uid, "characters"), {
+        name: item.name,
+        image: item.image,
+        rarity: item.rarity,
+        obtainedAt: serverTimestamp()
+      });
+
+      await setDoc(historyRef, { count: pulls + 1 });
+
+      // 表示
+      const resultDiv = document.getElementById("result");
+      const specialEffect = rarity === "ultra-rare" ? '<div class="special-effect">✨確定演出!!✨</div>' : "";
+      resultDiv.innerHTML = `
+        ${specialEffect}
+        <div class="fade-in">
+          <img src="${item.image}" class="item-image">
+          <div class="item-name">${item.name}</div>
+          <div class="rarity ${item.rarity}">${rarityLabel[item.rarity]}</div>
+        </div>
+      `;
+
+      updateZukan();
+    }
 
     function getRandomRarity() {
       const rand = Math.random() * 100;
@@ -103,81 +156,17 @@
       return "common";
     }
 
-    // ガチャ処理
-    window.rollGacha = async () => {
-      if (!currentUser) return alert("ログインしてください");
-      if (todayPulls >= maxPullsPerDay) {
-        document.getElementById("limitMessage").innerText = `本日は${maxPullsPerDay}回までです！`;
-        return;
-      }
-
-      document.getElementById("limitMessage").innerText = "";
-      document.getElementById("gachaSound").play();
-
-      const rarity = getRandomRarity();
-      const pool = items.filter(item => item.rarity === rarity);
-      const item = pool[Math.floor(Math.random() * pool.length)];
-
-      try {
-        // Firestoreに保存
-        await addDoc(collection(db, "users", currentUser.uid, "characters"), {
-          name: item.name,
-          image: item.image,
-          rarity: item.rarity,
-          obtainedAt: serverTimestamp(),
-          day: today
-        });
-
-        todayPulls++;
-        showResult(item);
-        await loadZukan();
-      } catch (err) {
-        alert("保存エラー: " + err.message);
-      }
-    };
-
-    function showResult(item) {
-      const resultDiv = document.getElementById("result");
-      const specialEffect = item.rarity === "ultra-rare" ? '<div class="special-effect">✨確定演出!!✨</div>' : "";
-      resultDiv.innerHTML = `
-        ${specialEffect}
-        <div class="fade-in">
-          <img src="${item.image}" class="item-image">
-          <div class="item-name">${item.name}</div>
-          <div class="rarity ${item.rarity}">${rarityLabel[item.rarity]}</div>
-        </div>
-      `;
-    }
-
-    async function loadZukan() {
-      const snap = await getDocs(collection(db, "users", currentUser.uid, "characters"));
+    async function updateZukan() {
       const zukan = document.getElementById("zukan");
       zukan.innerHTML = "";
-
-      const owned = {};
-      snap.forEach(doc => {
-        const data = doc.data();
-        owned[data.name] = (owned[data.name] || 0) + 1;
-      });
-
       items.forEach(item => {
-        const count = owned[item.name] || 0;
-        const imgClass = count > 0 ? "" : "unknown";
-        const imgSrc = count > 0 ? item.image : "https://cdn.pixabay.com/photo/2016/08/20/05/39/question-mark-1600718_1280.png";
-        const name = count > 0 ? `${item.name} × ${count}` : "？？？";
-
         zukan.innerHTML += `
           <div class="zukan-item">
-            <img src="${imgSrc}" class="${imgClass}">
-            <div>${name}</div>
+            <img src="${item.image}" class="">
+            <div>${item.name}</div>
           </div>
         `;
       });
-    }
-
-    async function countTodayPulls() {
-      const snap = await getDocs(query(collection(db, "users", currentUser.uid, "characters"), where("day", "==", today)));
-      todayPulls = snap.size;
     }
   </script>
 </body>
