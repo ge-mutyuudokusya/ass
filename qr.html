@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>QRトークン取得 | Daily Feed</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- QRコード読み取りライブラリ -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body class="bg-gradient-to-br from-indigo-100 via-pink-100 to-yellow-100 min-h-screen flex flex-col items-center justify-center p-6">
+
+  <div class="bg-white/80 backdrop-blur rounded-3xl shadow-2xl p-6 w-full max-w-md">
+    <h1 class="text-2xl font-bold text-center mb-4">QRコードでトークン取得</h1>
+    <p class="text-sm text-gray-600 text-center mb-4">
+      QRを読み込むと本日分のトークン(+1)が付与されます。<br>
+      1日1回のみ有効です。
+    </p>
+
+    <!-- QRスキャン領域 -->
+    <div id="reader" class="rounded-xl overflow-hidden shadow"></div>
+
+    <!-- 結果 -->
+    <div id="message" class="mt-4 text-center text-gray-700 text-sm"></div>
+
+    <div class="mt-6 text-center">
+      <a href="./home.html" class="text-indigo-600 hover:underline">← マイページへ戻る</a>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, updateDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+    // 🔑 Firebase設定（自分の値に置き換えてください）
+    const firebaseConfig = {
+apiKey: "AIzaSyDKjyxK2RixQKkpNp3kZkijDPGi39aNceE",
+  authDomain: "daily-feed-414b6.firebaseapp.com",
+  databaseURL: "https://daily-feed-414b6-default-rtdb.firebaseio.com",
+  projectId: "daily-feed-414b6",
+  storageBucket: "daily-feed-414b6.firebasestorage.app",
+  messagingSenderId: "360432327059",
+  appId: "1:360432327059:web:0cb52176305190294d3066",
+  measurementId: "G-0R08TWS1WP"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db   = getFirestore(app);
+
+    const messageEl = document.getElementById("message");
+    let currentUser = null;
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        messageEl.textContent = "ログインしていません。";
+        return location.href = "login.html";
+      }
+      currentUser = user;
+    });
+
+    // QRコード読み取り
+    function onScanSuccess(decodedText) {
+      if (!currentUser) return;
+      // QRコードの内容チェック（例: "DAILYFEED2025" 固定文字列）
+      if (decodedText !== "DAILYFEED2025") {
+        messageEl.textContent = "無効なQRコードです。";
+        return;
+      }
+      grantToken(currentUser.uid);
+    }
+
+    async function grantToken(uid) {
+      const ref = doc(db, "users", uid);
+      const snap = await getDoc(ref);
+      const today = new Date().toISOString().slice(0,10); // YYYY-MM-DD
+
+      if (!snap.exists()) {
+        await setDoc(ref, { tokens: 1, lastQR: today, createdAt: serverTimestamp() });
+        messageEl.textContent = "本日のトークン(+1)を付与しました！";
+        return;
+      }
+
+      const data = snap.data();
+      if (data.lastQR === today) {
+        messageEl.textContent = "今日はすでに取得済みです。";
+        return;
+      }
+
+      const newTokens = (data.tokens || 0) + 1;
+      await updateDoc(ref, { tokens: newTokens, lastQR: today });
+      messageEl.textContent = "本日のトークン(+1)を付与しました！";
+    }
+
+    // QRリーダー起動
+    const html5QrCode = new Html5Qrcode("reader");
+    Html5Qrcode.getCameras().then(devices => {
+      if (devices && devices.length) {
+        const cameraId = devices[0].id;
+        html5QrCode.start(
+          cameraId,
+          { fps: 10, qrbox: 200 },
+          onScanSuccess
+        ).catch(err => {
+          messageEl.textContent = "カメラ起動に失敗しました: " + err;
+        });
+      }
+    }).catch(err => {
+      messageEl.textContent = "カメラが見つかりません: " + err;
+    });
+  </script>
+</body>
+</html>
